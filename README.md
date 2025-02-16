@@ -373,10 +373,13 @@ app.listen(port, () => {
 To encrypt sensitive data (e.g., passwords, emails) in a MongoDB database using Mongoose, you can use the **`mongoose-encryption`** plugin. This plugin automatically encrypts and decrypts fields in your Mongoose models.
 
 
+***To test Encryption and Decrepection: [https://cryptii.com/](https://cryptii.com/)***
 
 ## **mongoose-encryption** to encrypt and decrypt data in your MongoDB database.
 
 **To test Encryption and Decrepection: [https://cryptii.com/](https://cryptii.com/)**
+
+#### Documentation mongoose-encryption: [https://www.npmjs.com/package/mongoose-encryption](https://www.npmjs.com/package/mongoose-encryption)
 
 ### Step 1: Install Required Packages
 Install the `mongoose-encryption` package:
@@ -591,3 +594,124 @@ rotateKeys();
 
 ---
 
+
+Hashing passwords is a critical step in securing user data. While **MD5** is a hashing algorithm, it is **not recommended** for password hashing because it is **cryptographically broken** and vulnerable to attacks like rainbow table attacks. Instead, you should use a modern, secure hashing algorithm like **bcrypt**, **Argon2**, or **PBKDF2**.
+
+However, if you still want to learn how to hash passwords using MD5 (for educational purposes only), I'll provide a tutorial. After that, I'll show you how to use **bcrypt**, which is the recommended approach.
+
+---
+
+### Hashing Passwords Using MD5
+
+#### Documentation: [https://www.npmjs.com/package/md5](https://www.npmjs.com/package/md5)
+
+#### Step 1: Install the `md5` Package
+Install the `md5` package from npm:
+```bash
+npm install md5
+```
+
+---
+
+#### Step 2: Hash a Password Using MD5
+Here’s how you can hash a password using MD5:
+
+```javascript
+const md5 = require("md5");
+
+const password = "password123";
+const hashedPassword = md5(password);
+
+console.log("Hashed Password:", hashedPassword);
+```
+
+**Output**:
+```
+Hashed Password: 482c811da5d5b4bc6d497ffa98491e38
+```
+
+---
+
+#### Step 3: Store the Hashed Password in the Database
+When a user registers, hash their password and store the hashed value in the database.
+
+```javascript
+const md5 = require("md5");
+const mongoose = require("mongoose");
+
+// Define a User schema
+const userSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  password: String, // Store the hashed password
+});
+
+const User = mongoose.model("User", userSchema);
+
+// Register a new user
+const registerUser = async (name, email, password) => {
+  const hashedPassword = md5(password); // Hash the password
+
+  const newUser = new User({
+    name,
+    email,
+    password: hashedPassword, // Store the hashed password
+  });
+
+  await newUser.save();
+  console.log("User registered successfully");
+};
+
+// Example usage
+registerUser("John Doe", "john.doe@example.com", "password123");
+```
+
+---
+
+#### Step 4: Verify the Password During Login
+When a user logs in, hash the provided password and compare it with the stored hashed password.
+
+```javascript
+const loginUser = async (email, password) => {
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    console.log("User not found");
+    return;
+  }
+
+  const hashedPassword = md5(password); // Hash the provided password
+
+  if (hashedPassword === user.password) {
+    console.log("Login successful");
+  } else {
+    console.log("Invalid password");
+  }
+};
+
+// Example usage
+loginUser("john.doe@example.com", "password123");
+```
+
+---
+### Why MD5 is Not Recommended for Password Hashing
+1. **Vulnerable to Attacks**:
+   - MD5 is susceptible to **rainbow table attacks** and **collision attacks**.
+   - Attackers can easily reverse-engineer MD5 hashes using precomputed tables.
+
+2. **No Salting**:
+   - MD5 does not support **salting**, which makes it easier for attackers to crack passwords.
+
+3. **Outdated**:
+   - MD5 is considered cryptographically broken and is no longer secure for password hashing.
+
+---
+
+
+
+### Final Notes
+- **Never use MD5** for password hashing in production applications.
+- Always use **bcrypt**, **Argon2**, or **PBKDF2** for secure password hashing.
+- Store only the hashed password in the database. Never store plain-text passwords.
+
+Let me know if you need further assistance!
