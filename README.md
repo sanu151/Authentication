@@ -366,3 +366,225 @@ app.listen(port, () => {
    - Passwords are hashed before storing in the database.
    - JWT tokens are used for secure authentication.
 
+
+To encrypt sensitive data (e.g., passwords, emails) in a MongoDB database using Mongoose, you can use the **`mongoose-encryption`** plugin. This plugin automatically encrypts and decrypts fields in your Mongoose models.
+
+
+
+## **mongoose-encryption** to encrypt and decrypt data in your MongoDB database.
+
+---
+
+### Step 1: Install Required Packages
+Install the `mongoose-encryption` package:
+```bash
+npm install mongoose-encryption
+```
+
+---
+
+### Step 2: Set Up Mongoose Encryption
+
+#### 1. Define Your Mongoose Schema
+Create a Mongoose schema as usual. For example, let's create a `User` schema with sensitive fields like `email` and `password`.
+
+#### `model/user.model.js`
+```javascript
+const mongoose = require("mongoose");
+
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  password: {
+    type: String,
+    required: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+module.exports = mongoose.model("User", userSchema);
+```
+
+---
+
+#### 2. Add Encryption to the Schema
+Use the `mongoose-encryption` plugin to encrypt and decrypt the `email` and `password` fields.
+
+#### `model/user.model.js` (Updated)
+```javascript
+const mongoose = require("mongoose");
+const encrypt = require("mongoose-encryption");
+
+const userSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  password: {
+    type: String,
+    required: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+// Add encryption plugin
+const encryptionKey = process.env.ENCRYPTION_KEY; // 32-character string
+const signingKey = process.env.SIGNING_KEY; // 64-character string
+
+userSchema.plugin(encrypt, {
+  encryptionKey: encryptionKey,
+  signingKey: signingKey,
+  encryptedFields: ["email", "password"], // Fields to encrypt
+});
+
+module.exports = mongoose.model("User", userSchema);
+```
+
+---
+
+#### 3. Set Up Environment Variables
+Store the encryption and signing keys in a `.env` file. These keys should be long, random strings:
+- `ENCRYPTION_KEY`: A 32-character string (for AES-256 encryption).
+- `SIGNING_KEY`: A 64-character string (for HMAC-SHA512 signing).
+
+#### `.env`
+```
+ENCRYPTION_KEY=32characterlongencryptionkey1234567890
+SIGNING_KEY=64characterlongsigningkey12345678901234567890123456789012345678901234
+```
+
+---
+
+#### 4. Load Environment Variables
+Use the `dotenv` package to load environment variables from the `.env` file.
+
+#### `config/app.config.js`
+```javascript
+require("dotenv").config();
+
+module.exports = {
+  app: {
+    port: process.env.PORT || 3000,
+  },
+  db: {
+    url: process.env.MONGODB_URL,
+  },
+  encryption: {
+    encryptionKey: process.env.ENCRYPTION_KEY,
+    signingKey: process.env.SIGNING_KEY,
+  },
+};
+```
+
+---
+
+### Step 3: Use the Encrypted Model
+Now, when you save a document using the `User` model, the `email` and `password` fields will be automatically encrypted. When you retrieve the document, the fields will be automatically decrypted.
+
+#### Example: Register a User
+```javascript
+const User = require("./model/user.model");
+
+const registerUser = async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Create a new user
+    const newUser = new User({ name, email, password });
+
+    // Save the user to the database
+    await newUser.save();
+
+    res.status(201).json({ message: "User registered successfully", user: newUser });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+```
+
+---
+
+### Step 4: Verify Encryption
+1. Start your server and register a user using the `/register` endpoint.
+2. Check the MongoDB Atlas database. The `email` and `password` fields should be encrypted (unreadable).
+3. Retrieve the user using the `User` model. The `email` and `password` fields should be automatically decrypted.
+
+---
+
+### Step 5: Decrypt Data Manually (Optional)
+If you need to decrypt data manually (e.g., for debugging), you can use the `mongoose-encryption` plugin's `decrypt` method.
+
+#### Example: Decrypt a User Document
+```javascript
+const User = require("./model/user.model");
+
+const getUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    // Manually decrypt the document
+    user.decrypt();
+
+    res.status(200).json({ user });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+```
+
+---
+
+### Step 6: Rotate Encryption Keys (Optional)
+If you need to change the encryption or signing keys, you can use the `rotateKey` method provided by `mongoose-encryption`.
+
+#### Example: Rotate Keys
+```javascript
+const User = require("./model/user.model");
+
+const rotateKeys = async () => {
+  const newEncryptionKey = "new32characterlongencryptionkey1234567890";
+  const newSigningKey = "new64characterlongsigningkey12345678901234567890123456789012345678901234";
+
+  await User.rotateKey(newEncryptionKey, newSigningKey);
+  console.log("Encryption keys rotated successfully");
+};
+
+rotateKeys();
+```
+
+---
+
+### Notes
+1. **Security**:
+   - Keep your encryption and signing keys secure. Never hardcode them in your code.
+   - Use environment variables or a secrets management tool.
+
+2. **Performance**:
+   - Encryption and decryption add overhead to database operations. Use it only for sensitive fields.
+
+3. **Backup**:
+   - Always back up your encryption keys. If you lose them, you won't be able to decrypt your data.
+
+4. **Alternatives**:
+   - For more advanced use cases, consider using **MongoDB Client-Side Field Level Encryption** or a dedicated encryption library like `crypto`.
+
+---
+
