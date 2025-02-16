@@ -1,3 +1,6 @@
+![image](https://github.com/user-attachments/assets/673cf8b2-84e4-4e95-a036-f6d52f5fc8c6)
+
+
 # Authentication
 * **Authentication using express.js, Node.js, MongoDB, RestAPI, React.js**
 
@@ -373,7 +376,7 @@ To encrypt sensitive data (e.g., passwords, emails) in a MongoDB database using 
 
 ## **mongoose-encryption** to encrypt and decrypt data in your MongoDB database.
 
----
+**To test Encryption and Decrepection: [https://cryptii.com/](https://cryptii.com/)**
 
 ### Step 1: Install Required Packages
 Install the `mongoose-encryption` package:
