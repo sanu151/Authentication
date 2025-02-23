@@ -1,0 +1,24 @@
+<%- include('layout/header') %>
+    <main>
+        <form action="/login" method="post">
+            <% if (errors) { %>
+                <p style="color: red;">
+                    <%= errors %>
+                </p>
+                <% } %>
+                    <div>
+                        <label for="email">Email : </label>
+                        <input type="email" name="email" placeholder="Enter Your Email">
+                    </div>
+                    <br>
+                    <div>
+                        <label for="password">Password : </label>
+                        <input type="password" name="password" placeholder="**********">
+                    </div>
+                    <br>
+                    <div>
+                        <button type="submit">Login</button>
+                    </div>
+        </form>
+    </main>
+    <%- include('layout/footer') %>
