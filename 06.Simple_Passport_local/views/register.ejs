@@ -1,0 +1,27 @@
+<%- include('layout/header') %>
+    <main>
+        <h1>Register Page</h1>
+        <div>
+            <form action="/register" method="post">
+                <div>
+                    <label for="name">Name : </label>
+                    <input type="text" name="name">
+                </div>
+                <div>
+                    <label for="email">Email : </label>
+                    <input type="email" name="email">
+                </div>
+                <div>
+                    <label for="password">Password : </label>
+                    <input type="password" name="password">
+                </div>
+                <div>
+                    <a href="/login">Already have an account?</a>
+                </div>
+                <div>
+                    <button type="submit">Register</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <%- include('layout/footer') %>

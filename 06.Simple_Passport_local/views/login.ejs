@@ -1,0 +1,23 @@
+<%- include('layout/header') %>
+    <main>
+        <h1>Login Page</h1>
+        <div>
+            <form action="/login" method="post">
+                <div>
+                    <label for="email">Email : </label>
+                    <input type="email" name="email">
+                </div>
+                <div>
+                    <label for="password">Password : </label>
+                    <input type="password" name="password">
+                </div>
+                <div>
+                    <a href="/register">Don't have an account?</a>
+                </div>
+                <div>
+                    <button type="submit">Login</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <%- include('layout/footer') %>
