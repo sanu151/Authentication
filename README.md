@@ -1239,3 +1239,719 @@ app.listen(3000, () => {
 Both approaches have their place, and the choice depends on your application's requirements. Let me know if you need further clarification or examples!
 
 
+## Passport.js with Express.js
+
+Using Passport.js with Express.js for user authentication.
+
+**I. Introduction to Passport.js**
+
+*   Passport.js is middleware for Node.js that simplifies authentication.
+*   It supports various authentication strategies (Local, Google, Facebook, etc.).
+*   It's designed to be modular and easy to integrate into Express.js applications.
+
+**II. Key Concepts**
+
+*   **Strategies:** Authentication methods (e.g., LocalStrategy for username/password).
+*   **Serialization:** Storing user information in the session (usually just the user ID).
+*   **Deserialization:** Retrieving the full user object from the session (using the ID).
+*   **Middleware:** Functions that run before your route handlers to check authentication.
+
+**III. Setting up Passport.js**
+
+1.  **Install Dependencies:**
+    ```bash
+    npm install passport passport-local express express-session bcrypt joi  // Add other strategies as needed
+    ```
+
+2.  **Require Modules:**
+    ```javascript
+    const passport = require('passport');
+    const LocalStrategy = require('passport-local').Strategy;
+    const bcrypt = require('bcrypt'); // For password hashing
+    const session = require('express-session');
+    const Joi = require('joi'); // For validation
+    ```
+
+3.  **Express.js Setup:**
+    ```javascript
+    const express = require('express');
+    const app = express();
+
+    app.use(express.urlencoded({ extended: true }));
+    app.use(express.json());
+
+    // Session Configuration (Important!)
+    app.use(session({
+      secret: 'your_secret_key', // Replace with a strong secret
+      resave: false,
+      saveUninitialized: false
+    }));
+
+    app.use(passport.initialize());
+    app.use(passport.session());
+    ```
+
+**IV. Defining a Strategy (Local Strategy Example)**
+
+```javascript
+passport.use(new LocalStrategy(
+  async (username, password, done) => {
+    try {
+      const user = await User.findOne({ username: username }); // Find user in DB
+      if (!user) {
+        return done(null, false, { message: 'Incorrect username.' });
+      }
+
+      const isValidPassword = await bcrypt.compare(password, user.password); // Compare hashed passwords
+      if (!isValidPassword) {
+        return done(null, false, { message: 'Incorrect password.' });
+      }
+
+      return done(null, user); // Success! Pass the user object
+    } catch (err) {
+      return done(err);
+    }
+  }
+));
+```
+
+**V. Serialization and Deserialization**
+
+```javascript
+passport.serializeUser((user, done) => {
+  done(null, user.id); // Store the user ID in the session
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id); // Retrieve user from DB based on ID
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
+});
+```
+
+**VI. Routes and Middleware**
+
+1.  **Login Route (POST):**
+    ```javascript
+    app.post('/login',
+      passport.authenticate('local', {
+        failureRedirect: '/login', // Redirect on failure
+        failureFlash: true // Use flash messages for errors (optional)
+      }),
+      (req, res) => {
+        res.redirect('/dashboard'); // Redirect on success
+      }
+    );
+    ```
+
+2.  **Protected Routes:**
+    ```javascript
+    function isAuthenticated(req, res, next) {
+      if (req.isAuthenticated()) {
+        return next(); // User is logged in, proceed
+      }
+      res.redirect('/login'); // Redirect to login if not authenticated
+    }
+
+    app.get('/dashboard', isAuthenticated, (req, res) => {
+      res.render('dashboard', { user: req.user }); // Access user via req.user
+    });
+    ```
+
+3.  **Logout Route:**
+    ```javascript
+    app.get('/logout', (req, res) => {
+      req.logout(function(err) {
+        if (err) { return next(err); }
+        res.redirect('/login');
+      });
+    });
+    ```
+
+**VII. User Registration**
+
+*   Use bcrypt to hash passwords *before* storing them in the database.
+*   Validate user input (e.g., using Joi) to prevent invalid data.
+
+```javascript
+const registerSchema = Joi.object({
+  username: Joi.string().alphanum().min(3).max(30).required(),
+  password: Joi.string().min(6).required()
+});
+
+app.post('/register', async (req, res) => {
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) {
+        return res.status(400).send(error.details[0].message);
+    }
+
+    const { username, password } = value;
+    const hashedPassword = await bcrypt.hash(password, 10); // Hash the password
+    const newUser = new User({ username, password: hashedPassword }); // Store the hash
+
+    try {
+        await newUser.save();
+        res.redirect('/login');
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error registering user');
+    }
+});
+```
+
+**VIII. Important Considerations**
+
+*   **Security:** Never store passwords in plain text. Always hash them using bcrypt.
+*   **Session Management:** Use `express-session` to manage user sessions securely.  Set a strong, random secret.
+*   **Error Handling:** Implement proper error handling to prevent crashes and provide informative messages.
+*   **Database:** Choose a database (MongoDB, PostgreSQL, etc.) and set up your user model.
+*   **Validation:** Always validate user input to prevent vulnerabilities.
+
+**IX. Example Folder Structure**
+
+```
+- server.js      // Main application file
+- routes/        // Route handlers
+- models/        // Database models
+- views/         // EJS templates
+- public/        // Static files (CSS, JS)
+```
+
+
+### Algorithm Passport.js with code
+
+```javascript
+// server.js (Main Express app)
+const express = require('express');
+const session = require('express-session');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const bcrypt = require('bcrypt');
+const Joi = require('joi'); // For validation
+const mongoose = require('mongoose'); // If using MongoDB
+
+const app = express();
+const port = 3000;
+
+// Database Connection (Example with MongoDB)
+mongoose.connect('mongodb://localhost:27017/your_database_name', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => console.log('Connected to MongoDB'))
+.catch(err => console.error('MongoDB connection error:', err));
+
+
+// Define User Schema (Mongoose example)
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+});
+
+const User = mongoose.model('User', userSchema);
+
+
+// Validation Schema (Joi)
+const registerSchema = Joi.object({
+  username: Joi.string().alphanum().min(3).max(30).required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+});
+
+const loginSchema = Joi.object({
+  username: Joi.string().required(),
+  password: Joi.string().required(),
+});
+
+
+// Middleware
+app.use(express.urlencoded({ extended: true })); // For parsing form data
+app.use(express.json());
+app.use(express.static('public')); // Serve static files (CSS, JS)
+app.set('view engine', 'ejs'); // Set EJS as the view engine
+
+// Session Configuration (Important for Passport.js)
+app.use(session({
+  secret: 'your_secret_key', // Change this to a random, strong secret
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false } // Set to true in production if using HTTPS
+}));
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Passport.js Configuration
+passport.use(new LocalStrategy(
+  async (username, password, done) => {
+    try {
+      const user = await User.findOne({ username: username });
+      if (!user) {
+        return done(null, false, { message: 'Incorrect username.' });
+      }
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      if (!isValidPassword) {
+        return done(null, false, { message: 'Incorrect password.' });
+      }
+      return done(null, user);
+    } catch (err) {
+      return done(err);
+    }
+  }
+));
+
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err);
+  }
+});
+
+// Routes
+app.get('/', (req, res) => {
+  res.render('index', { user: req.user }); // Pass user data to the view
+});
+
+app.get('/register', (req, res) => {
+  res.render('register', { errors: {} }); // Initialize empty errors object
+});
+
+app.post('/register', async (req, res) => {
+  try {
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) {
+      return res.render('register', { errors: error.details });
+    }
+
+    const { username, email, password } = value;
+    const hashedPassword = await bcrypt.hash(password, 10); // Hash the password
+    const newUser = new User({ username, email, password: hashedPassword });
+    await newUser.save();
+    res.redirect('/login');
+  } catch (err) {
+    console.error(err);
+    res.render('register', { errors: [{ message: 'An error occurred during registration.' }] });
+  }
+});
+
+app.get('/login', (req, res) => {
+  res.render('login', { message: req.flash('error') }); // Display flash message
+});
+
+app.post('/login', passport.authenticate('local', {
+  failureRedirect: '/login',
+  failureFlash: true // Enable flash messages for errors
+}), (req, res) => {
+  res.redirect('/dashboard'); // Redirect on successful login
+});
+
+app.get('/dashboard', isAuthenticated, (req, res) => {
+  res.render('dashboard', { user: req.user });
+});
+
+app.get('/logout', (req, res) => {
+  req.logout(function(err) {
+    if (err) { return next(err); }
+    res.redirect('/login');
+  });
+});
+
+// Middleware to check authentication
+function isAuthenticated(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.redirect('/login');
+}
+
+app.listen(port, () => {
+  console.log(`Server is listening on port ${port}`);
+});
+
+```
+
+**EJS Templates (Examples):**
+
+*   **register.ejs:**
+
+```html
+<h1>Register</h1>
+<% if (errors && errors.length > 0) { %>
+  <ul class="errors">
+    <% errors.forEach(error => { %>
+      <li><%= error.message %></li>
+    <% }); %>
+  </ul>
+<% } %>
+<form action="/register" method="post">
+  <input type="text" name="username" placeholder="Username" required><br>
+  <input type="email" name="email" placeholder="Email" required><br>
+  <input type="password" name="password" placeholder="Password" required><br>
+  <button type="submit">Register</button>
+</form>
+```
+
+*   **login.ejs:**
+
+```html
+<h1>Login</h1>
+<% if (message) { %>
+  <p class="error"><%= message %></p>
+<% } %>
+<form action="/login" method="post">
+  <input type="text" name="username" placeholder="Username" required><br>
+  <input type="password" name="password" placeholder="Password" required><br>
+  <button type="submit">Login</button>
+</form>
+```
+
+*   **dashboard.ejs:**
+
+```html
+<h1>Dashboard</h1>
+<% if (user) { %>
+  <p>Welcome, <%= user.username %>!</p>
+  <a href="/logout">Logout</a>
+<% } else { %>
+  <p>You are not logged in.</p>
+  <a href="/login">Login</a>
+<% } %>
+```
+
+**Key Points and Explanations:**
+
+1.  **Dependencies:** Make sure you install the required packages: `npm install express express-session passport passport-local bcrypt joi mongoose ejs`
+
+2.  **Database Connection:** The code includes an example of connecting to MongoDB using Mongoose. Adapt this to your database (e.g., PostgreSQL, MySQL).
+
+3.  **User Model:** The `User` model defines the structure of your user data in the database.
+
+4.  **Validation:** Joi is used to validate user input during registration. This helps prevent bad data from entering your database.
+
+5.  **Password Hashing:** bcrypt is *essential* for securely storing passwords.  Never store passwords in plain text.
+
+6.  **Passport.js Strategy:** The `LocalStrategy` handles username/password authentication.
+
+7.  **Serialization/Deserialization:** These functions are crucial for managing user sessions.  We store the user ID in the session and retrieve the full user object from the database when needed.
+
+8.  **Routes:** The code defines routes for registration, login, dashboard, and logout.
+
+9.  **Middleware:** The `isAuthenticated` middleware protects routes that require authentication.
+
+10. **EJS Templates:** The EJS templates provide basic HTML structure for the pages.  You'll need to create these files.
+
+11. **Error Handling:** The example includes some basic error handling, but you'll want to add more robust error handling in a production application.
+
+12. **Flash Messages:** The code uses `connect-flash` (install it: `npm install connect-flash`) to display error messages on the login page.  You'll need to configure flash messages in your Express app.  I've added `failureFlash: true` to the `passport.authenticate` call.
+
+
+---
+
+### **Algorithm for Passport Local Authentication Project**
+
+#### **1. Setup the Project**
+1. **Initialize the Project**:
+   - Create a new directory for your project.
+   - Run `npm init -y` to initialize a `package.json` file.
+
+2. **Install Dependencies**:
+   - Install the required packages:
+     ```bash
+     npm install express passport passport-local mongoose bcrypt ejs connect-flash express-session connect-mongo
+     ```
+   - Install `nodemon` as a dev dependency:
+     ```bash
+     npm install --save-dev nodemon
+     ```
+
+3. **Set Up Environment Variables**:
+   - Create a `.env` file in the root directory.
+   - Add environment variables:
+     ```env
+     PORT=3000
+     MONGODB_URI=mongodb://localhost:27017/userAuthDB
+     SESSION_SECRET=your-secret-key
+     ```
+
+4. **Configure `nodemon`**:
+   - Add a `start` script to `package.json`:
+     ```json
+     "scripts": {
+       "start": "nodemon index.js"
+     }
+     ```
+
+---
+
+#### **2. Project Structure**
+The project structure is as follows:
+```
+project-root/
+│
+├── config/
+│   ├── database.js
+│   └── passport.js
+│
+├── views/
+│   ├── layout/
+│   │   ├── header.ejs
+│   │   └── footer.ejs
+│   ├── home.ejs
+│   ├── login.ejs
+│   ├── register.ejs
+│   └── profile.ejs
+│
+├── app.js
+├── index.js
+├── .env
+└── .gitignore
+```
+
+---
+
+#### **3. Configure MongoDB Connection**
+1. **Set Up MongoDB Connection**:
+   - In `config/database.js`, connect to MongoDB using Mongoose:
+     ```javascript
+     const mongoose = require("mongoose");
+
+     mongoose
+       .connect("mongodb://localhost:27017/userAuthDB")
+       .then(() => {
+         console.log(`MongoDB connected successfully`);
+       })
+       .catch((err) => {
+         console.log(`MongoDB connection error: ${err}`);
+       });
+
+     const userSchema = mongoose.Schema({
+       name: String,
+       email: String,
+       password: String,
+     });
+
+     const Users = mongoose.model("user", userSchema);
+
+     module.exports = Users;
+     ```
+
+---
+
+#### **4. Configure Passport Local Strategy**
+1. **Set Up Passport**:
+   - In `config/passport.js`, configure the local strategy:
+     ```javascript
+     const passport = require("passport");
+     const LocalStrategy = require("passport-local").Strategy;
+     const userModel = require("./database");
+     const bcrypt = require("bcrypt");
+
+     passport.use(
+       new LocalStrategy(
+         {
+           usernameField: "email",
+           passwordField: "password",
+           passReqToCallback: true,
+         },
+         async (req, email, password, done) => {
+           try {
+             const user = await userModel.findOne({ email: email });
+             if (!user) {
+               return done(null, false, req.flash("error", "Invalid email"));
+             }
+             const isMatched = await bcrypt.compare(password, user.password);
+             if (!isMatched) {
+               return done(null, false, req.flash("error", "Invalid password"));
+             }
+             return done(null, user);
+           } catch (err) {
+             return done(err);
+           }
+         }
+       )
+     );
+
+     passport.serializeUser(function (user, done) {
+       done(null, user.id);
+     });
+
+     passport.deserializeUser(async function (id, done) {
+       try {
+         const user = await userModel.findById(id);
+         done(null, user);
+       } catch (err) {
+         done(err);
+       }
+     });
+     ```
+
+---
+
+#### **5. Configure Express App**
+1. **Set Up Express**:
+   - In `app.js`, configure Express, session, and Passport:
+     ```javascript
+     const express = require("express");
+     const userModel = require("./config/database");
+     const passport = require("passport");
+     const bcrypt = require("bcrypt");
+     const saltRounds = 10;
+     const app = express();
+     require("./config/passport");
+
+     const flash = require("connect-flash");
+     const session = require("express-session");
+     const MongoStore = require("connect-mongo");
+
+     app.set("view engine", "ejs");
+     app.use(express.urlencoded({ extended: true }));
+
+     app.set("trust proxy", 1); // trust first proxy
+     app.use(
+       session({
+         secret: "keyboard cat",
+         resave: false,
+         saveUninitialized: true,
+         store: MongoStore.create({
+           mongoUrl: "mongodb://localhost:27017/userAuthDB",
+           collectionName: "sessions",
+         }),
+         cookie: { maxAge: 1000 * 60 * 60 * 24 },
+       })
+     );
+
+     app.use(flash());
+     app.use(passport.initialize());
+     app.use(passport.session());
+
+     // Make flash messages available in views
+     app.use((req, res, next) => {
+       res.locals.error = req.flash("error"); // Pass error messages to views
+       next();
+     });
+
+     // Routes
+     app.get("/", (req, res) => {
+       res.render("home");
+     });
+
+     app.get("/register", (req, res) => {
+       res.render("register");
+     });
+
+     app.get("/login", (req, res) => {
+       res.render("login", { error: req.flash("error") });
+     });
+
+     app.post(
+       "/login",
+       passport.authenticate("local", {
+         successRedirect: "profile",
+         failureRedirect: "login",
+         failureFlash: true,
+       })
+     );
+
+     app.get("/profile", ensureAuthenticated, (req, res) => {
+       res.render("profile", { user: req.user });
+     });
+
+     app.get("/logout", (req, res) => {
+       req.logout((err) => {
+         if (err) {
+           return res.status(500).json({ message: "Logout failed", error: err });
+         }
+         req.session.destroy((err) => {
+           if (err) {
+             return res
+               .status(500)
+               .json({ message: "Session destruction failed", error: err });
+           }
+           res.redirect("/");
+         });
+       });
+     });
+
+     app.post("/register", (req, res) => {
+       const { name, email, password } = req.body;
+       bcrypt.hash(password, saltRounds, async function (err, hash) {
+         const newUser = new userModel({
+           name: name,
+           email: email,
+           password: hash,
+         });
+         const saveUser = await newUser.save();
+         res.render("login");
+       });
+     });
+
+     const ensureAuthenticated = (req, res, next) => {
+       if (req.isAuthenticated()) {
+         return next();
+       }
+       res.redirect("/login");
+     };
+
+     module.exports = app;
+     ```
+
+---
+
+#### **6. Create Views**
+1. **Set Up EJS Templates**:
+   - Create `views/layout/header.ejs`, `views/layout/footer.ejs`, `views/home.ejs`, `views/login.ejs`, `views/register.ejs`, and `views/profile.ejs` as per your provided code.
+
+---
+
+#### **7. Start the Server**
+1. **Run the Application**:
+   - In `index.js`, start the server:
+     ```javascript
+     const app = require("./app");
+     const port = 3000;
+
+     app.listen(port, () => {
+       console.log(`Server is running at http://localhost:${port}`);
+     });
+     ```
+
+2. **Start the Server**:
+   - Run the following command:
+     ```bash
+     npm start
+     ```
+
+---
+
+### **Flow of the Application**
+1. **User Registration**:
+   - User visits `/register` and submits the registration form.
+   - Password is hashed using `bcrypt` and stored in MongoDB.
+   - User is redirected to the login page.
+
+2. **User Login**:
+   - User visits `/login` and submits the login form.
+   - Passport authenticates the user using the local strategy.
+   - If successful, the user is redirected to the profile page.
+   - If failed, an error message is displayed.
+
+3. **User Profile**:
+   - Authenticated users can access `/profile`.
+   - Unauthenticated users are redirected to the login page.
+
+4. **User Logout**:
+   - User clicks the logout link.
+   - Session is destroyed, and the user is redirected to the home page.
+
+---
+
+This algorithm provides a clear flow of the application and how the components interact. Let me know if you need further clarification!
