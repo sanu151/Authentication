@@ -1954,4 +1954,335 @@ project-root/
 
 ---
 
-This algorithm provides a clear flow of the application and how the components interact. Let me know if you need further clarification!
+This algorithm provides a clear flow of the application and how the components interact.
+
+
+## Project for **Google OAuth2.0 authentication** 
+
+---
+
+### **Project Setup**
+
+#### **1. Install Dependencies**
+Run the following command to install the required packages:
+
+```bash
+npm install express express-session passport passport-google-oauth20 mongoose connect-mongo ejs dotenv
+```
+
+Install `nodemon` as a dev dependency:
+
+```bash
+npm install --save-dev nodemon
+```
+
+---
+
+#### **2. Project Structure**
+```
+project-root/
+│
+├── config/
+│   ├── passport.js
+│   └── database.js
+│
+├── models/
+│   └── User.js
+│
+├── views/
+│   ├── home.ejs
+│   ├── profile.ejs
+│   └── layout/
+│       ├── header.ejs
+│       └── footer.ejs
+│
+├── .env
+├── app.js
+├── index.js
+└── .gitignore
+```
+
+---
+
+#### **3. Environment Variables**
+Create a `.env` file and add the following:
+
+```env
+PORT=3000
+MONGODB_URI=mongodb://localhost:27017/googleAuthDB
+SESSION_SECRET=your-secret-key
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+CALLBACK_URL=http://localhost:3000/auth/google/callback
+```
+
+---
+
+#### **4. Configure MongoDB Connection**
+In `config/database.js`:
+
+```javascript
+const mongoose = require("mongoose");
+
+mongoose
+  .connect(process.env.MONGODB_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.log("MongoDB connection error:", err));
+
+module.exports = mongoose;
+```
+
+---
+
+#### **5. Create User Model**
+In `models/User.js`:
+
+```javascript
+const mongoose = require("mongoose");
+
+const userSchema = new mongoose.Schema({
+  googleId: String,
+  displayName: String,
+  email: String,
+});
+
+module.exports = mongoose.model("User", userSchema);
+```
+
+---
+
+#### **6. Configure Passport Google Strategy**
+In `config/passport.js`:
+
+```javascript
+const passport = require("passport");
+const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const User = require("../models/User");
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.CALLBACK_URL,
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        let user = await User.findOne({ googleId: profile.id });
+
+        if (!user) {
+          user = new User({
+            googleId: profile.id,
+            displayName: profile.displayName,
+            email: profile.emails[0].value,
+          });
+          await user.save();
+        }
+
+        done(null, user);
+      } catch (err) {
+        done(err, null);
+      }
+    }
+  )
+);
+
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (err) {
+    done(err, null);
+  }
+});
+```
+
+---
+
+#### **7. Configure Express App**
+In `app.js`:
+
+```javascript
+const express = require("express");
+const session = require("express-session");
+const passport = require("passport");
+const MongoStore = require("connect-mongo");
+const mongoose = require("./config/database");
+const dotenv = require("dotenv");
+
+dotenv.config();
+
+const app = express();
+
+// Session middleware
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI }),
+    cookie: { maxAge: 1000 * 60 * 60 * 24 }, // 1 day
+  })
+);
+
+// Passport initialization
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Set up EJS
+app.set("view engine", "ejs");
+app.use(express.urlencoded({ extended: true }));
+
+// Routes
+app.get("/", (req, res) => {
+  res.render("home", { user: req.user });
+});
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", { failureRedirect: "/" }),
+  (req, res) => {
+    res.redirect("/profile");
+  }
+);
+
+app.get("/profile", (req, res) => {
+  if (!req.isAuthenticated()) return res.redirect("/");
+  res.render("profile", { user: req.user });
+});
+
+app.get("/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) console.log(err);
+    res.redirect("/");
+  });
+});
+
+module.exports = app;
+```
+
+---
+
+#### **8. Create Views**
+1. **`views/layout/header.ejs`**:
+   ```html
+   <!DOCTYPE html>
+   <html lang="en">
+   <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Google OAuth</title>
+   </head>
+   <body>
+     <header>
+       <a href="/">Home</a>
+       <% if (user) { %>
+         <a href="/profile">Profile</a>
+         <a href="/logout">Logout</a>
+       <% } else { %>
+         <a href="/auth/google">Login with Google</a>
+       <% } %>
+     </header>
+   ```
+
+2. **`views/layout/footer.ejs`**:
+   ```html
+   <footer>
+     <p>&copy; 2023 Google OAuth Project</p>
+   </footer>
+   </body>
+   </html>
+   ```
+
+3. **`views/home.ejs`**:
+   ```html
+   <%- include("layout/header") %>
+   <main>
+     <h1>Welcome to Google OAuth</h1>
+     <% if (user) { %>
+       <p>Hello, <%= user.displayName %>!</p>
+     <% } else { %>
+       <p>Please log in to continue.</p>
+     <% } %>
+   </main>
+   <%- include("layout/footer") %>
+   ```
+
+4. **`views/profile.ejs`**:
+   ```html
+   <%- include("layout/header") %>
+   <main>
+     <h1>Profile Page</h1>
+     <p>Name: <%= user.displayName %></p>
+     <p>Email: <%= user.email %></p>
+   </main>
+   <%- include("layout/footer") %>
+   ```
+
+---
+
+#### **9. Start the Server**
+In `index.js`:
+
+```javascript
+const app = require("./app");
+const port = process.env.PORT || 3000;
+
+app.listen(port, () => {
+  console.log(`Server is running on http://localhost:${port}`);
+});
+```
+
+---
+
+### **Project Algorithm**
+
+#### **1. User Visits Home Page**
+- User accesses `/`.
+- If authenticated, display user details.
+- If not authenticated, show a login link.
+
+#### **2. User Clicks "Login with Google"**
+- User is redirected to Google's OAuth consent screen.
+- After granting access, Google redirects to `/auth/google/callback`.
+
+#### **3. Passport Authenticates User**
+- Passport verifies the user using the Google OAuth2.0 strategy.
+- If the user exists in the database, log them in.
+- If the user doesn't exist, create a new user in the database.
+
+#### **4. User Redirected to Profile Page**
+- After successful authentication, the user is redirected to `/profile`.
+- The profile page displays the user's details (name, email).
+
+#### **5. User Logs Out**
+- User clicks the "Logout" link.
+- Session is destroyed, and the user is redirected to the home page.
+
+---
+
+### **Run the Project**
+1. Start MongoDB:
+   ```bash
+   mongod
+   ```
+
+2. Start the server:
+   ```bash
+   npm start
+   ```
+
+3. Visit `http://localhost:3000` in your browser.
+
+---
+
+This project provides a simple implementation of Google OAuth2.0 authentication.
