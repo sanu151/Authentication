@@ -2286,3 +2286,614 @@ app.listen(port, () => {
 ---
 
 This project provides a simple implementation of Google OAuth2.0 authentication.
+
+## MERN Project using `passport-JWT`
+### Creating a MERN (MongoDB, Express, React, Node.js) project using **Passport-JWT** for authentication involves setting up a backend with JWT-based authentication and a frontend (React) to interact with it. Below is a step-by-step guide with code for implementing a MERN project using **Passport-JWT**.
+
+---
+
+### **1. Project Structure**
+Here’s the structure of the project:
+
+```
+mern-passport-jwt/
+├── backend/
+│   ├── config/
+│   │   ├── database.js
+│   │   ├── passport.js
+│   ├── controllers/
+│   │   ├── authController.js
+│   ├── models/
+│   │   ├── User.js
+│   ├── routes/
+│   │   ├── authRoutes.js
+│   ├── .env
+│   ├── app.js
+│   ├── server.js
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── App.js
+│   │   ├── index.js
+│   ├── package.json
+├── package.json
+```
+
+---
+
+### **2. Backend Setup**
+
+### **Step 1: Install Dependencies**
+Navigate to the `backend` folder and install the required packages:
+
+```bash
+cd backend
+npm install express mongoose bcryptjs jsonwebtoken passport passport-jwt dotenv cors
+```
+
+---
+
+### **Step 2: Configure Environment Variables**
+Create a `.env` file in the `backend` folder:
+
+```env
+PORT=5000
+MONGO_URI=mongodb://localhost:27017/mern_passport_jwt
+JWT_SECRET=your_jwt_secret_key
+```
+
+---
+
+### **Step 3: Set Up MongoDB Connection**
+Create `config/database.js`:
+
+```javascript
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+
+dotenv.config();
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("MongoDB Connected");
+  } catch (err) {
+    console.error("MongoDB Connection Error:", err.message);
+    process.exit(1);
+  }
+};
+
+module.exports = connectDB;
+```
+
+---
+
+### **Step 4: Configure Passport-JWT**
+Create `config/passport.js`:
+
+```javascript
+const passport = require("passport");
+const JwtStrategy = require("passport-jwt").Strategy;
+const ExtractJwt = require("passport-jwt").ExtractJwt;
+const User = require("../models/User");
+const dotenv = require("dotenv");
+
+dotenv.config();
+
+const opts = {
+  jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+  secretOrKey: process.env.JWT_SECRET,
+};
+
+passport.use(
+  new JwtStrategy(opts, async (jwt_payload, done) => {
+    try {
+      const user = await User.findById(jwt_payload.id);
+      if (user) {
+        return done(null, user);
+      } else {
+        return done(null, false);
+      }
+    } catch (err) {
+      return done(err, false);
+    }
+  })
+);
+```
+
+---
+
+### **Step 5: Create User Model**
+Create `models/User.js`:
+
+```javascript
+const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+
+const userSchema = new mongoose.Schema({
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  password: {
+    type: String,
+    required: true,
+  },
+});
+
+userSchema.pre("save", async function (next) {
+  if (this.isModified("password")) {
+    this.password = await bcrypt.hash(this.password, 10);
+  }
+  next();
+});
+
+module.exports = mongoose.model("User", userSchema);
+```
+
+---
+
+### **Step 6: Create Auth Controller**
+Create `controllers/authController.js`:
+
+```javascript
+const User = require("../models/User");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+
+// Register User
+exports.register = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // Check if user exists
+    let user = await User.findOne({ username });
+    if (user) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    // Create new user
+    user = new User({ username, password });
+    await user.save();
+
+    // Generate JWT
+    const payload = { id: user._id };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    res.status(201).json({ token });
+  } catch (err) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// Login User
+exports.login = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    // Check if user exists
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Validate password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    // Generate JWT
+    const payload = { id: user._id };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+    res.json({ token });
+  } catch (err) {
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// Protected Route
+exports.profile = (req, res) => {
+  res.json({ user: req.user });
+};
+```
+
+---
+
+### **Step 7: Set Up Routes**
+Create `routes/authRoutes.js`:
+
+```javascript
+const express = require("express");
+const router = express.Router();
+const passport = require("passport");
+const authController = require("../controllers/authController");
+
+// Public Routes
+router.post("/register", authController.register);
+router.post("/login", authController.login);
+
+// Protected Route
+router.get(
+  "/profile",
+  passport.authenticate("jwt", { session: false }),
+  authController.profile
+);
+
+module.exports = router;
+```
+
+---
+
+### **Step 8: Set Up Express App**
+Create `app.js`:
+
+```javascript
+const express = require("express");
+const cors = require("cors");
+const passport = require("passport");
+const connectDB = require("./config/database");
+const authRoutes = require("./routes/authRoutes");
+
+const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(passport.initialize());
+
+// Database Connection
+connectDB();
+
+// Routes
+app.use("/api/auth", authRoutes);
+
+module.exports = app;
+```
+
+---
+
+### **Step 9: Start the Server**
+Create `server.js`:
+
+```javascript
+const app = require("./app");
+const dotenv = require("dotenv");
+
+dotenv.config();
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+```
+
+---
+
+### **3. Run the Project**
+Start the backend server:
+   ```bash
+   cd backend
+   npm start
+   ```
+
+
+
+
+### **Frontend Algorithm**
+1. **User Registration**:
+   - Collect username and password from the user.
+   - Send a POST request to `/api/auth/register` to create a new user.
+   - Store the JWT token returned from the backend in local storage or cookies.
+
+2. **User Login**:
+   - Collect username and password from the user.
+   - Send a POST request to `/api/auth/login` to authenticate the user.
+   - Store the JWT token returned from the backend in local storage or cookies.
+
+3. **Access Protected Routes**:
+   - Retrieve the JWT token from local storage or cookies.
+   - Include the token in the `Authorization` header for requests to protected routes (e.g., `/api/auth/profile`).
+
+4. **Logout**:
+   - Remove the JWT token from local storage or cookies.
+
+---
+
+## **Frontend Code**
+
+### **Step 1: Project Structure**
+```
+frontend/
+├── public/
+├── src/
+│   ├── components/
+│   │   ├── Register.js
+│   │   ├── Login.js
+│   │   ├── Profile.js
+│   │   ├── Navbar.js
+│   ├── App.js
+│   ├── index.js
+│   ├── App.css
+│   ├── index.css
+│   ├── utils/
+│   │   ├── api.js
+├── package.json
+```
+
+---
+
+### **Step 2: Install Dependencies**
+Navigate to the `frontend` folder and install the required packages:
+
+```bash
+cd frontend
+npm install axios react-router-dom
+```
+
+---
+
+### **Step 3: Create Utility for API Calls**
+Create `src/utils/api.js` to handle API requests:
+
+```javascript
+import axios from "axios";
+
+const API_URL = "http://localhost:5000/api/auth";
+
+// Register user
+export const register = async (username, password) => {
+  const response = await axios.post(`${API_URL}/register`, { username, password });
+  return response.data;
+};
+
+// Login user
+export const login = async (username, password) => {
+  const response = await axios.post(`${API_URL}/login`, { username, password });
+  return response.data;
+};
+
+// Get user profile
+export const getProfile = async (token) => {
+  const response = await axios.get(`${API_URL}/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+```
+
+---
+
+### **Step 4: Create React Components**
+
+#### **1. Register Component**
+Create `src/components/Register.js`:
+
+```javascript
+import React, { useState } from "react";
+import { register } from "../utils/api";
+
+const Register = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await register(username, password);
+      setMessage("Registration successful!");
+      console.log("Token:", data.token);
+    } catch (err) {
+      setMessage("Registration failed.");
+      console.error(err);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Register</h2>
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button type="submit">Register</button>
+      </form>
+      {message && <p>{message}</p>}
+    </div>
+  );
+};
+
+export default Register;
+```
+
+---
+
+#### **2. Login Component**
+Create `src/components/Login.js`:
+
+```javascript
+import React, { useState } from "react";
+import { login } from "../utils/api";
+
+const Login = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = await login(username, password);
+      localStorage.setItem("token", data.token); // Store token in local storage
+      setMessage("Login successful!");
+      console.log("Token:", data.token);
+    } catch (err) {
+      setMessage("Login failed.");
+      console.error(err);
+    }
+  };
+
+  return (
+    <div>
+      <h2>Login</h2>
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button type="submit">Login</button>
+      </form>
+      {message && <p>{message}</p>}
+    </div>
+  );
+};
+
+export default Login;
+```
+
+---
+
+#### **3. Profile Component**
+Create `src/components/Profile.js`:
+
+```javascript
+import React, { useEffect, useState } from "react";
+import { getProfile } from "../utils/api";
+
+const Profile = () => {
+  const [user, setUser] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setError("No token found. Please log in.");
+        return;
+      }
+
+      try {
+        const data = await getProfile(token);
+        setUser(data.user);
+      } catch (err) {
+        setError("Failed to fetch profile.");
+        console.error(err);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  return (
+    <div>
+      <h2>Profile</h2>
+      {error && <p>{error}</p>}
+      {user && (
+        <div>
+          <p>Username: {user.username}</p>
+          <p>User ID: {user.id}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Profile;
+```
+
+---
+
+#### **4. Navbar Component**
+Create `src/components/Navbar.js`:
+
+```javascript
+import React from "react";
+import { Link } from "react-router-dom";
+
+const Navbar = () => {
+  return (
+    <nav>
+      <Link to="/">Home</Link>
+      <Link to="/register">Register</Link>
+      <Link to="/login">Login</Link>
+      <Link to="/profile">Profile</Link>
+    </nav>
+  );
+};
+
+export default Navbar;
+```
+
+---
+
+### **Step 5: Set Up Routing**
+Update `src/App.js` to include routing:
+
+```javascript
+import React from "react";
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Register from "./components/Register";
+import Login from "./components/Login";
+import Profile from "./components/Profile";
+import "./App.css";
+
+const App = () => {
+  return (
+    <Router>
+      <Navbar />
+      <Routes>
+        <Route path="/register" element={<Register />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/profile" element={<Profile />} />
+      </Routes>
+    </Router>
+  );
+};
+
+export default App;
+```
+
+---
+
+### **Step 6: Run the Frontend**
+Start the React app:
+
+```bash
+npm start
+```
+
+---
+
+## **How It Works**
+1. **Register**: Users can register by providing a username and password. The token is returned and logged to the console.
+2. **Login**: Users can log in with their credentials. The token is stored in local storage.
+3. **Profile**: Users can access their profile by sending the token in the `Authorization` header.
+
+---
+
